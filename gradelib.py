@@ -16,7 +16,7 @@ TESTS = []
 TOTAL = POSSIBLE = 0
 PART_TOTAL = PART_POSSIBLE = 0
 CURRENT_TEST = None
-GRADES = {}
+JSON_OUTPUT = {}
 
 def test(points, title=None, parent=None):
     """Decorator for declaring test functions.  If title is None, the
@@ -32,7 +32,13 @@ def test(points, title=None, parent=None):
             title = "  " + title
 
         def run_test():
-            global TOTAL, POSSIBLE, CURRENT_TEST, GRADES
+            global TOTAL, POSSIBLE, CURRENT_TEST, JSON_OUTPUT
+
+            test_json = {"score" : 0.0,
+                         "max_score" : points,
+                         "status" : "failed",
+                         "name" : title,
+                         "name_format" : "text"}
 
             # Handle test dependencies
             if run_test.complete:
@@ -69,8 +75,10 @@ def test(points, title=None, parent=None):
                 print("    %s" % fail.replace("\n", "\n    "))
             else:
                 TOTAL += points
-            if points:
-                GRADES[title] = 0 if fail else points
+                test_json["score"] = points
+                test_json["status"] = "passed"
+
+            JSON_OUTPUT["tests"].append(test_json)
 
             for callback in run_test.on_finish:
                 callback(fail)
@@ -99,31 +107,28 @@ def end_part(name):
     show_part.title = ""
     TESTS.append(show_part)
 
-def write_results():
-    global options
-    if not options.results:
-        return
-    try:
-        with open(options.results, "w") as f:
-            f.write(json.dumps(GRADES))
-    except OSError as e:
-        print("Provided a bad results path. Error:", e)
-
 def run_tests():
     """Set up for testing and run the registered test functions."""
 
     # Handle command line
-    global options
-    parser = OptionParser(usage="usage: %prog [-v] [filters...]")
+    global options, JSON_OUTPUT
+    parser = OptionParser(usage="usage: %prog [-vg] [filters...]")
     parser.add_option("-v", "--verbose", action="store_true",
                       help="print commands")
     parser.add_option("--color", choices=["never", "always", "auto"],
                       default="auto", help="never, always, or auto")
-    parser.add_option("--results", help="results file path")
+    parser.add_option("-g", "--gradeit", action="store_true",
+            help="output minimal grading info in JSON format")
     (options, args) = parser.parse_args()
 
+    JSON_OUTPUT["tests"] = []
+    JSON_OUTPUT["output_format"] = "ansi"
+    JSON_OUTPUT["visibility"] = "visible"
+    JSON_OUTPUT["score"] = 0.0
+
+
     # Start with a full build to catch build errors
-    make()
+    make(options.gradeit)
 
     # Clean the file system if there is one
     reset_fs()
@@ -135,12 +140,15 @@ def run_tests():
             if not limit or any(l in test.title.lower() for l in limit):
                 test()
         if not limit:
-            write_results()
             print("Score: %d/%d" % (TOTAL, POSSIBLE))
+            JSON_OUTPUT["score"] = TOTAL
+            if options.gradeit:
+                with open('/autograder/results/results.json', 'w') as f:
+                    json.dump(JSON_OUTPUT, f)
     except KeyboardInterrupt:
         pass
     if TOTAL < POSSIBLE:
-        sys.exit(1)
+        sys.exit(0)
 
 def get_current_test():
     if not CURRENT_TEST:
@@ -231,15 +239,18 @@ def post_make():
     global MAKE_TIMESTAMP
     MAKE_TIMESTAMP = int(time.time())
 
-def make(*target):
+def make(quiet=False, *target):
     pre_make()
-    if Popen(("make",) + target).wait():
+    qargs = ()
+    if quiet:
+        qargs = ("-s",)
+
+    if Popen(("make",) + qargs + target).wait():
         sys.exit(1)
     post_make()
 
 def show_command(cmd):
-    from pipes import quote
-    print("\n$", " ".join(map(quote, cmd)))
+    print("\n$", " ".join(cmd))
 
 def maybe_unlink(*paths):
     for path in paths:
@@ -276,7 +287,6 @@ def check_time():
 
 def check_answers(file, n=10):
     try:
-        print("")
         with open(file) as f:
             d = f.read().strip()
             if len(d) < n:
