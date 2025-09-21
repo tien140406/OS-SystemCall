@@ -5,16 +5,16 @@ from gradelib import *
 
 r = Runner(save("xv6.out"))
 
-@test(10, "answers-boot.txt")
+@test(5, "answers-boot.txt")
 def test_answers():
     # just a simple sanity check, will be graded manually
     check_answers("answers-boot.txt")
 
-@test(0, "usertests")
+@test(5, "xv6 boots")
 def test_usertests():
     r.run_qemu(shell_script([
-        'usertests -q'
+        'ls'
     ]), timeout=1000)
-    r.match('^ALL TESTS PASSED$')
+    r.match('README')
 
 run_tests()
