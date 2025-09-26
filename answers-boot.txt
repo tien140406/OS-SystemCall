@@ -1,0 +1,11 @@
+What was the hardest part of setting up this environment?
+Getting my ssh key to work. Had some technical difficulties but eventually got it working properly within the WSL environment.
+
+Did any of the instructions not work as expected?
+The ssh key integration wasn't working at first, but eventually I was able to troubleshoot it using some of the GitLab manuals.
+
+Which OS are you using?
+I am using Ubuntu 24.04.3 LTS (thorugh WSL)
+
+Which IDE are you using?
+VS Code
