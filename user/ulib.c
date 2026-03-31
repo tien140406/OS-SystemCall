@@ -96,6 +96,13 @@ stat(const char *n, struct stat *st)
 }
 
 int
+sysinfo(struct sysinfo *st)
+{
+  extern int info(struct sysinfo *);
+  return info(st);
+}
+
+int
 atoi(const char *s)
 {
   int n;
