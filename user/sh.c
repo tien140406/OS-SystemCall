@@ -165,6 +165,32 @@ main(void)
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
     }
+    char *argv[MAXARGS];
+    int argc = 0;
+    char *p = buf;
+    while(*p && argc < MAXARGS){
+        while(*p && (*p==' ' || *p=='\t')) p++;
+        if(!*p) break;
+        argv[argc++] = p;
+        while(*p && *p!=' ' && *p!='\t' && *p!='\n') p++;
+        if(*p) *p++ = 0;
+    }
+    argv[argc] = 0;
+
+    // Xử lý lệnh trace
+    if(argc > 2 && strcmp(argv[0], "trace") == 0){
+        int mask = atoi(argv[1]);
+        int pid = fork();
+        if(pid == 0){
+            trace(mask);       // gọi syscall trace
+            exec(argv[2], &argv[2]); // chạy chương trình với các args
+            fprintf(2, "exec %s failed\n", argv[2]);
+            exit(1);
+        } else {
+            wait(0);
+        }
+        continue;
+    }
     if(fork1() == 0)
       runcmd(parsecmd(buf));
     wait(0);
