@@ -157,6 +157,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_trace]   sys_trace,
 [SYS_info]    sys_info,
+[SYS_pgaccess] sys_pgaccess,
 };
 
 void
