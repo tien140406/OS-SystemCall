@@ -165,9 +165,14 @@ main(void)
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
     }
+    char tbuf[100];
     char *argv[MAXARGS];
     int argc = 0;
-    char *p = buf;
+
+    // Parse a scratch copy for the custom trace command so parsecmd(buf)
+    // still sees the original command line.
+    memmove(tbuf, buf, sizeof(tbuf));
+    char *p = tbuf;
     while(*p && argc < MAXARGS){
         while(*p && (*p==' ' || *p=='\t')) p++;
         if(!*p) break;
