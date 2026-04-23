@@ -26,6 +26,8 @@ int trace(int);
 struct sysinfo; // forward struct
 int sysinfo(struct sysinfo *);
 
+int pgaccess(void *base, int len, void *mask);
+
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);

@@ -1,0 +1,168 @@
+diff --git a/kernel/defs.h b/kernel/defs.h
+index d88d8b8..44c5a5f 100644
+--- a/kernel/defs.h
++++ b/kernel/defs.h
+@@ -177,6 +177,8 @@ int             copyout(pagetable_t, uint64, char *, uint64);
+ int             copyin(pagetable_t, char *, uint64, uint64);
+ int             copyinstr(pagetable_t, char *, uint64, uint64);
+ 
++void vmprint(pagetable_t pagetable);
++
+ // plic.c
+ void            plicinit(void);
+ void            plicinithart(void);
+diff --git a/kernel/exec.c b/kernel/exec.c
+index 6d7c452..dfe8a7d 100644
+--- a/kernel/exec.c
++++ b/kernel/exec.c
+@@ -128,6 +128,10 @@ exec(char *path, char **argv)
+   p->trapframe->sp = sp; // initial stack pointer
+   proc_freepagetable(oldpagetable, oldsz);
+ 
++  if (p->pid == 1)
++      vmprint(p->pagetable);
++
++
+   return argc; // this ends up in a0, the first argument to main(argc, argv)
+ 
+  bad:
+diff --git a/kernel/riscv.h b/kernel/riscv.h
+index 6cfff1e..3363f50 100644
+--- a/kernel/riscv.h
++++ b/kernel/riscv.h
+@@ -376,6 +376,8 @@ typedef uint64 *pagetable_t; // 512 PTEs
+ #define PTE_X (1L << 3)
+ #define PTE_U (1L << 4) // user can access
+ 
++#define PTE_A (1L << 6) // accessed bit (RISC-V spec, bit 6)
++
+ 
+ 
+ #if defined(LAB_MMAP) || defined(LAB_PGTBL)
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index 8c9d842..f7c5d27 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -129,6 +129,7 @@ extern uint64 sys_mkdir(void);
+ extern uint64 sys_close(void);
+ extern uint64 sys_trace(void);
+ extern uint64 sys_info(void);
++extern uint64 sys_pgaccess(void);
+ 
+ // An array mapping syscall numbers from syscall.h
+ // to the function that handles the system call.
+diff --git a/kernel/syscall.h b/kernel/syscall.h
+index 35d3b1b..a09ba19 100644
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -21,4 +21,6 @@
+ #define SYS_mkdir  20
+ #define SYS_close  21
+ #define SYS_trace  22
+-#define SYS_info   23
+\ No newline at end of file
++#define SYS_info   23
++
++#define SYS_pgaccess 24
+\ No newline at end of file
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index 95651d2..09c006b 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -118,4 +118,35 @@ sys_info(void)
+     return -1;
+ 
+   return 0;
++}
++
++int sys_pgaccess(void) {
++    uint64 base;
++    int   len;        
++    uint64 user_mask; 
++
++    argaddr(0, &base);
++    argint(1, &len);
++    argaddr(2, &user_mask);
++
++    if (len > 64) return -1;
++
++    struct proc *p = myproc();
++    uint64 bitmask = 0;
++
++    for (int i = 0; i < len; i++) {
++        pte_t *pte = walk(p->pagetable, base + i * PGSIZE, 0);
++        if (pte == 0) continue;
++
++        if (*pte & PTE_A) {
++            bitmask |= (1UL << i);
++            *pte &= ~PTE_A;
++        }
++    }
++
++    if (copyout(p->pagetable, user_mask,
++                (char *)&bitmask, sizeof(bitmask)) < 0)
++        return -1;
++
++    return 0;
+ }
+\ No newline at end of file
+diff --git a/kernel/vm.c b/kernel/vm.c
+index 62421a2..25ed41b 100644
+--- a/kernel/vm.c
++++ b/kernel/vm.c
+@@ -6,6 +6,29 @@
+ #include "defs.h"
+ #include "fs.h"
+ 
++
++static void vmprint_level(pagetable_t pagetable, int depth) {
++    for (int i = 0; i < 512; i++) {
++        pte_t pte = pagetable[i];
++        if (pte & PTE_V) {
++            for (int j = 0; j < depth; j++)
++                printf(".. ");
++            
++            uint64 pa = PTE2PA(pte);
++            printf("%d: pte %p pa %p\n", i, (void*)pte, (void*)pa);
++            
++            if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
++                vmprint_level((pagetable_t)pa, depth + 1);
++            }
++        }
++    }
++}
++
++void vmprint(pagetable_t pagetable) {
++    printf("page table %p\n", pagetable);
++    vmprint_level(pagetable, 1);
++}
++
+ /*
+  * the kernel's page table.
+  */
+diff --git a/user/user.h b/user/user.h
+index a3e25de..f0817a5 100644
+--- a/user/user.h
++++ b/user/user.h
+@@ -26,6 +26,8 @@ int trace(int);
+ struct sysinfo; // forward struct
+ int sysinfo(struct sysinfo *);
+ 
++int pgaccess(void *base, int len, void *mask);
++
+ // ulib.c
+ int stat(const char*, struct stat*);
+ char* strcpy(char*, const char*);
+diff --git a/user/usys.pl b/user/usys.pl
+index ed285e3..16dd027 100755
+--- a/user/usys.pl
++++ b/user/usys.pl
+@@ -37,4 +37,5 @@ entry("sbrk");
+ entry("sleep");
+ entry("uptime");
+ entry("trace");
+-entry("info");
+\ No newline at end of file
++entry("info");
++entry("pgaccess");
+\ No newline at end of file

@@ -119,3 +119,34 @@ sys_info(void)
 
   return 0;
 }
+
+int sys_pgaccess(void) {
+    uint64 base;
+    int   len;        
+    uint64 user_mask; 
+
+    argaddr(0, &base);
+    argint(1, &len);
+    argaddr(2, &user_mask);
+
+    if (len > 64) return -1;
+
+    struct proc *p = myproc();
+    uint64 bitmask = 0;
+
+    for (int i = 0; i < len; i++) {
+        pte_t *pte = walk(p->pagetable, base + i * PGSIZE, 0);
+        if (pte == 0) continue;
+
+        if (*pte & PTE_A) {
+            bitmask |= (1UL << i);
+            *pte &= ~PTE_A;
+        }
+    }
+
+    if (copyout(p->pagetable, user_mask,
+                (char *)&bitmask, sizeof(bitmask)) < 0)
+        return -1;
+
+    return 0;
+}
